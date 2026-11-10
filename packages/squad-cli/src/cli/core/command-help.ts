@@ -266,8 +266,9 @@ const COMMAND_HELP: Record<string, HelpPrinter> = {
     console.log(`state read/write tools to MCP-compatible hosts.\n`);
     console.log(`Options:`);
     console.log(`  ${BOLD}--experimental-backend${RESET}      Also expose the experimental squad_backend_* conversation`);
-    console.log(`                              tools (or set SQUAD_EXPERIMENTAL_BACKEND=1). Transcript/event-log`);
-    console.log(`                              only: no execution harness is bundled.\n`);
+    console.log(`                              tools (or set SQUAD_EXPERIMENTAL_BACKEND=1). Runs turns on the`);
+    console.log(`                              claude-agent-sdk harness when @anthropic-ai/claude-agent-sdk is`);
+    console.log(`                              installed; otherwise transcript/event-log only.\n`);
   },
 
   doctor: (version) => {
@@ -394,6 +395,8 @@ function printWatchHelp(name: 'triage' | 'watch', version: string): void {
   console.log(`Core flags:`);
   console.log(`  ${BOLD}--execute${RESET}                   Spawn agents to work on issues`);
   console.log(`  ${BOLD}--copilot-flags "..."${RESET}       Extra flags for Copilot CLI`);
+  console.log(`  ${BOLD}--agent-preset <name>${RESET}       Agent runner: copilot (default) or claude`);
+  console.log(`  ${BOLD}--claude-flags "..."${RESET}        Extra flags for the claude preset`);
   console.log(`  ${BOLD}--max-concurrent N${RESET}          Parallel issue limit (default 1)`);
   console.log(`  ${BOLD}--timeout N${RESET}                 Max minutes per issue (default 30)`);
   console.log(`  ${BOLD}--claims <none|git-ref>${RESET}     Claim issues across watchers (default none)`);

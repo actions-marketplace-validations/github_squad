@@ -51,7 +51,7 @@
       "runtime": {
         "subagents": true,
         "backgroundRuns": true,
-        "perSpawnModel": false,
+        "perSpawnModel": true,
         "sqlTool": false,
         "shell": true,
         "mcpInheritedBySubagents": true
@@ -166,8 +166,9 @@
         "claude": {
           "capability": "supported",
           "validation": "validated-live",
-          "mechanism": "CLI scaffolds `.squad/`; coordinator Init Mode (digest §0) uses `squad_state_read team.md`, auto-confirms headless, casts via `squad cast --name`, never hand-edits `.squad/casting/`.",
+          "mechanism": "CLI scaffolds `.squad/`; the digest stub (§0) decides Init Mode with `squad_state_read team.md`, never glob, and loads the `squad-coordinator-init-mode` skill, which auto-confirms headless, casts via `squad cast --name` and never hand-edits `.squad/casting/`.",
           "evidence": [
+            "validated-test:test/claude-skills.test.ts::*",
             "validated-test:test/clients.test.ts::coordinator behavioral-contract parity",
             "validated-test:test/squad-20-all-scenarios.e2e.test.ts::field findings from the live demo: Init Mode, scratch files, casting registry",
             "validated-test:test/cli/init.test.ts::*",
@@ -438,15 +439,13 @@
           "notes": "Expected-fail digest gap (per-host it.fails in test/clients.test.ts): The CLI/SDK side works, but the projected digest carries no section for it, so the coordinator is not told about it on this host. Unsupported on this host until the section ships."
         },
         "claude": {
-          "capability": "unsupported",
+          "capability": "supported",
           "validation": "validated-test",
-          "expectedFailure": true,
-          "mechanism": "`Task` has no per-call model; only subagent-definition `model:` frontmatter. Digest lacks the model-selection section.",
+          "mechanism": "Each member's `.claude/agents/<id>.md` carries the charter's `Preferred` model (Claude models and aliases only) and the reasoning effort resolved from `.squad/config.json` (`agentReasoningEffortOverrides`, `defaultReasoningEffort`) over the charter. The Claude dispatch section applies the higher-precedence model layers (user directive, `agentModelOverrides`, `defaultModel`, session choice) as the per-call `Agent` `model`. A non-Claude model, a per-spawn effort directive (the `Agent` tool has no per-call effort) and `long_context` without a long-context Claude model are reported, not applied.",
           "evidence": [
-            "validated-test:test/clients.test.ts::coordinator digest vs. host feature matrix",
-            "static-only"
-          ],
-          "notes": "Expected-fail digest gap (per-host it.fails in test/clients.test.ts): unsupported on this host until the section ships."
+            "validated-test:test/claude-members.test.ts::*",
+            "validated-test:test/clients.test.ts::coordinator digest vs. host feature matrix"
+          ]
         },
         "kiro": {
           "capability": "unsupported",
@@ -1100,8 +1099,9 @@
         "claude": {
           "capability": "supported",
           "validation": "validated-live",
-          "mechanism": "Digest §17 lists `.squad/skills/` → `.copilot/skills/` → `.github/skills/` → `.claude/skills/` → `.agents/skills/` with earlier-wins precedence.",
+          "mechanism": "Digest §17 lists `.squad/skills/` → `.copilot/skills/` → `.github/skills/` → `.claude/skills/` → `.agents/skills/` with earlier-wins precedence. Squad's template skills are also projected as native skills in `.claude/skills/`, except where a team skill of the same name exists in `.squad/skills/`.",
           "evidence": [
+            "validated-test:test/claude-skills.test.ts::*",
             "validated-test:test/clients.test.ts::coordinator behavioral-contract parity",
             "validated-test:test/skills.test.ts::*",
             "validated-manual:lab:skills-precedence@2026-10-22"
@@ -1189,9 +1189,11 @@
         "claude": {
           "capability": "supported",
           "validation": "validated-live",
-          "mechanism": "Digest §12: REJECT locks out the author; revision reassigned; re-review required.",
+          "mechanism": "Digest §12: REJECT locks out the author; revision reassigned; re-review required. `squad lockout` records the §6 lockout state in `.squad/governance/lockouts.json`; with `claudeHooks: \"advisory\"`, a PreToolUse hook warns a locked-out member that edits a covered path (advisory: never denies).",
           "evidence": [
             "validated-test:test/clients.test.ts::coordinator behavioral-contract parity",
+            "validated-test:test/claude-hooks.test.ts::runs reject → assign → submit → approve, and approval clears the lockout",
+            "validated-test:test/claude-hooks.test.ts::PreToolUse warns when a locked-out member edits a subject file, and never denies",
             "validated-manual:lab:reviewer-lockout@2026-10-22"
           ]
         },
@@ -1440,8 +1442,9 @@
         "claude": {
           "capability": "supported",
           "validation": "validated-test",
-          "mechanism": "Digest §15 reads `ceremonies.md`, spawns a facilitator, records via `squad_decide`.",
+          "mechanism": "The digest stub (§15) loads the `squad-coordinator-ceremonies` skill, which reads `ceremonies.md`, spawns a facilitator and records via `squad_decide`.",
           "evidence": [
+            "validated-test:test/claude-skills.test.ts::*",
             "validated-test:test/clients.test.ts::coordinator behavioral-contract parity",
             "static-only"
           ]
@@ -1701,8 +1704,9 @@
         "claude": {
           "capability": "supported",
           "validation": "validated-live",
-          "mechanism": "Digest §9: coordinator runs the loop itself via `gh`; circuit breaker template. Requires `gh` authenticated inside the host.",
+          "mechanism": "The digest stub (§9) loads the `squad-coordinator-ralph-mode` skill; the coordinator runs the loop itself via `gh`, with the circuit breaker template. Requires `gh` authenticated inside the host.",
           "evidence": [
+            "validated-test:test/claude-skills.test.ts::*",
             "validated-test:test/clients.test.ts::coordinator Ralph mode",
             "validated-test:test/clients.test.ts::coordinator behavioral-contract parity",
             "validated-manual:lab:ralph-no-repo@2026-10-22"
@@ -1789,12 +1793,12 @@
           ]
         },
         "claude": {
-          "capability": "degraded",
+          "capability": "supported",
           "validation": "validated-test",
-          "mechanism": "Scanning/routing is host-agnostic, but `--execute` dispatches through the Copilot CLI unless `agentCmd` (`--agent-cmd \"<host> … {prompt}\"`) is configured; no built-in preset for this host.",
+          "mechanism": "Built-in preset: `--agent-preset claude` (or `watch.agentPreset: \"claude\"`) runs `claude -p {prompt} --agent squad --mcp-config <squad_state-only config> --output-format stream-json --verbose` (the config is written by the CLI; the repository's `.mcp.json` is never passed); execute mode defaults to `--permission-mode bypassPermissions`. Fleet dispatch stays Copilot-only.",
           "evidence": [
             "validated-test:test/ralph-triage.test.ts::*",
-            "static-only"
+            "validated-test:test/cli/watch-claude-preset.test.ts::*"
           ]
         },
         "kiro": {
@@ -1874,8 +1878,9 @@
         "claude": {
           "capability": "supported",
           "validation": "validated-test",
-          "mechanism": "Digest §19; `prd-intake.md` template on demand.",
+          "mechanism": "The digest stub (§19) loads the `squad-coordinator-prd-mode` skill; `prd-intake.md` template on demand.",
           "evidence": [
+            "validated-test:test/claude-skills.test.ts::*",
             "validated-test:test/clients.test.ts::coordinator behavioral-contract parity",
             "static-only"
           ]
@@ -3870,10 +3875,11 @@
         "claude": {
           "capability": "n/a",
           "validation": "static-only",
-          "mechanism": "Runs in GitHub Actions with the Copilot engine; the local host is irrelevant.",
+          "mechanism": "Runs in GitHub Actions, so the local host is irrelevant. Squad's workflows use the Copilot engine; gh-aw also has a built-in Claude Code engine (`engine: claude`), which Squad does not ship a workflow for.",
           "evidence": [
             "static-only"
-          ]
+          ],
+          "notes": "Re-evaluated for #2442 (research: https://github.com/github/squad/issues/2438#issuecomment-6753729924). A Squad workflow on `engine: claude` would pass `engine.args: [\"--agent\", \"squad\"]` (gh-aw has no native agent selection for Claude) and needs `bare: false` for subagent delegation; not yet run."
         },
         "kiro": {
           "capability": "n/a",
@@ -4371,23 +4377,33 @@
       "cells": {
         "copilot": {
           "capability": "supported",
-          "validation": "validated-test",
-          "mechanism": "Opt-in tools over the same MCP server; backend semantics are host-independent.",
+          "validation": "validated-live",
+          "mechanism": "Opt-in tools over the same MCP server; backend semantics are host-independent. The `copilot-sdk` harness (`CopilotSdkHarness`) executes turns on the Copilot SDK; opt-in on the bridge via `SQUAD_BACKEND_HARNESSES=copilot-sdk`.",
           "evidence": [
             "validated-test:test/squad-20-real-clients-stdio.e2e.test.ts::completes the MCP handshake and lists squad_state_* and all squad_backend_* tools when opted in",
             "validated-test:test/squad-20-all-scenarios.e2e.test.ts::Scenario 4: DurableHttpSquadBackend full HTTP lifecycle",
-            "validated-test:test/squad-20-all-scenarios.e2e.test.ts::Full non-bypass journey: host adapter → broker → harness → approval → restart/reconnect"
-          ]
+            "validated-test:test/squad-20-all-scenarios.e2e.test.ts::Full non-bypass journey: host adapter → broker → harness → approval → restart/reconnect",
+            "validated-test:test/harness-contract.test.ts::*",
+            "validated-test:test/copilot-sdk-harness.test.ts::completes a turn through the broker",
+            "validated-test:test/copilot-sdk-harness.test.ts::completes a turn with a harness-only Copilot config directory (login still works)",
+            "validated-manual:lab:copilot-sdk-harness@2026-11-10"
+          ],
+          "notes": "Live: plain turns through the broker on the real Copilot backend (2026-11-09; again 2026-11-10 after event correlation, including with a harness-only config directory). Approvals are covered by the shared contract, not yet live."
         },
         "claude": {
           "capability": "supported",
-          "validation": "validated-test",
-          "mechanism": "Opt-in tools over the same MCP server; backend semantics are host-independent.",
+          "validation": "validated-live",
+          "mechanism": "Opt-in tools over the same MCP server; backend semantics are host-independent. The `claude-agent-sdk` harness (`ClaudeAgentSdkHarness`) executes turns on the Claude Agent SDK when the optional peer is installed.",
           "evidence": [
             "validated-test:test/squad-20-real-clients-stdio.e2e.test.ts::completes the MCP handshake and lists squad_state_* and all squad_backend_* tools when opted in",
             "validated-test:test/squad-20-all-scenarios.e2e.test.ts::Scenario 4: DurableHttpSquadBackend full HTTP lifecycle",
-            "validated-test:test/squad-20-all-scenarios.e2e.test.ts::Full non-bypass journey: host adapter → broker → harness → approval → restart/reconnect"
-          ]
+            "validated-test:test/squad-20-all-scenarios.e2e.test.ts::Full non-bypass journey: host adapter → broker → harness → approval → restart/reconnect",
+            "validated-test:test/harness-contract.test.ts::*",
+            "validated-test:test/claude-agent-sdk-harness.test.ts::*",
+            "validated-test:test/claude-agent-sdk-harness.test.ts::routes a real tool call through broker approval and honours a deny",
+            "validated-manual:lab:claude-agent-sdk-harness@2026-11-10"
+          ],
+          "notes": "Live (2026-11-10): one turn through the broker, and a write command approved-or-denied through the broker (denied: not run). Claude Code runs some read-only commands without asking, so those never reach the broker."
         },
         "kiro": {
           "capability": "supported",
@@ -4546,7 +4562,7 @@
         "claude": {
           "capability": "supported",
           "validation": "validated-live",
-          "mechanism": "Subagents inherit MCP servers (Claude `Task`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
+          "mechanism": "Subagents inherit MCP servers (Claude `Agent`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
           "evidence": [
             "validated-manual:lab:parallel-fanout@2026-10-22"
           ],
@@ -4556,7 +4572,7 @@
           "capability": "supported",
           "validation": "blocked",
           "blockedReason": "live run blocked on the reference machine: kiro-cli chat failed: \"The monthly usage limit has been reached\".",
-          "mechanism": "Subagents inherit MCP servers (Claude `Task`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
+          "mechanism": "Subagents inherit MCP servers (Claude `Agent`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
           "evidence": [
             "static-only"
           ],
@@ -4565,7 +4581,7 @@
         "opencode": {
           "capability": "supported",
           "validation": "validated-live",
-          "mechanism": "Subagents inherit MCP servers (Claude `Task`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
+          "mechanism": "Subagents inherit MCP servers (Claude `Agent`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
           "evidence": [
             "validated-manual:lab:parallel-fanout@2026-10-22"
           ],
@@ -4575,7 +4591,7 @@
           "capability": "supported",
           "validation": "blocked",
           "blockedReason": "live run blocked on the reference machine: cursor-agent -p failed: \"You've hit your usage limit\".",
-          "mechanism": "Subagents inherit MCP servers (Claude `Task`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
+          "mechanism": "Subagents inherit MCP servers (Claude `Agent`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
           "evidence": [
             "static-only"
           ],
@@ -4584,7 +4600,7 @@
         "codex": {
           "capability": "supported",
           "validation": "untested",
-          "mechanism": "Subagents inherit MCP servers (Claude `Task`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
+          "mechanism": "Subagents inherit MCP servers (Claude `Agent`, Codex `spawn_agent`, OpenCode child sessions, Kiro subagents).",
           "evidence": [
             "static-only"
           ],
@@ -4975,6 +4991,32 @@
       "outcome": "blocked",
       "observedTools": [],
       "notes": "cursor-agent -p failed: \"You've hit your usage limit\"."
+    },
+    {
+      "host": "copilot",
+      "scenario": "copilot-sdk-harness",
+      "date": "2026-11-09",
+      "outcome": "pass",
+      "observedTools": [],
+      "notes": "copilot-sdk HarnessAdapter (@github/copilot-sdk 1.0.19, signed-in Copilot user) completed one turn through LocalSquadBackend: \"Reply with exactly the word: pong\" → completed, transcript ends in pong (4.4 s). Plain text only; no tool approval in this run."
+    },
+    {
+      "host": "claude",
+      "scenario": "claude-agent-sdk-harness",
+      "date": "2026-11-10",
+      "outcome": "pass",
+      "observedTools": [
+        "Bash"
+      ],
+      "notes": "claude-agent-sdk HarnessAdapter (@anthropic-ai/claude-agent-sdk 0.3.317, Anthropic API key) through LocalSquadBackend: a plain turn completed (6.7 s); a Bash `touch` reached the broker as an approval, was denied, ended the turn cancelled, and the file was not created (6.1 s). A read-only `echo` ran without an approval request (Claude Code treats it as safe)."
+    },
+    {
+      "host": "copilot",
+      "scenario": "copilot-sdk-harness",
+      "date": "2026-11-10",
+      "outcome": "pass",
+      "observedTools": [],
+      "notes": "After review round 4 (event correlation to the turn's own user.message, durable state): one turn through LocalSquadBackend completed (5.7 s), and the same with a harness-only Copilot configDirectory in an empty temp dir (3.2 s): sign-in still works there, so state-mcp's isolated config directory is safe."
     }
   ],
   "expectedFailures": [
@@ -5049,7 +5091,6 @@
       "perHost": true,
       "hosts": [
         "copilot",
-        "claude",
         "kiro",
         "opencode",
         "cursor",
@@ -5078,7 +5119,7 @@
   "limitations": [
     "Capability and validation are separate axes: a `supported` cell may be only `static-only`, and an `unsupported` digest-gap cell is `validated-test` because an `it.fails` proves the gap. Read both columns.",
     "Expected failures are pinned per host and per gap (one `it.fails` per `<gap> [<host>]` pair); a section landing for one host turns exactly that host's test red. Those cells are `unsupported`, never `degraded`.",
-    "Live evidence exists for Claude Code and OpenCode only (reference machine, 2026-10-22). Kiro, Codex, Antigravity and Cursor have no passing live run: their cells are `validated-test` only through host-independent tests, otherwise `static-only`, `untested` or `blocked`.",
+    "Live evidence exists for Claude Code and OpenCode (reference machine, 2026-10-22) and for both execution harnesses on the experimental backend: `copilot-sdk` (2026-11-09) and `claude-agent-sdk` (2026-11-10). Kiro, Codex, Antigravity and Cursor have no passing live run: their cells are `validated-test` only through host-independent tests, otherwise `static-only`, `untested` or `blocked`.",
     "The opt-in headless coordinator tests (`SQUAD_REAL_MODEL_TESTS=1`) verify the MCP bridge through a tee'd `squad state-mcp` transcript (a successful `tools/call` of `squad_state_read` with `key: \"team.md\"`), not by matching stdout. No other cell claims bridge-level verification."
   ]
 }
