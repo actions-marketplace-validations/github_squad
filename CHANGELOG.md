@@ -67,6 +67,8 @@ Claude Code is the first host after GitHub Copilot where Squad uses the host's o
 - New `squad client sync` refreshes the configured hosts' files without a full upgrade. Init Mode runs it after writing `routing.md`, so each Claude Code member subagent's description names what the member owns instead of repeating its role (#2456).
 - `squad_state_health` and `squad health --json` add `resolvedTeamRoot` (the directory that contains `.squad`) and `resolvedSquadDir` (the squad directory itself). `resolvedTeamDir` keeps its value, the team root, for existing consumers (#2455).
 - The Claude coordinator no longer asks Scribe for session or orchestration logs, matching Scribe's charter and the Copilot coordinator (#2454).
+- The Claude coordinator's Init Mode step names the casting commands itself (`squad cast` for each member, then `squad client sync`) and says never to write under `.claude/` directly. In a live run the coordinator skipped the init-mode skill and hand-wrote files Claude Code blocks, so member subagents were never created.
+- `squad dashboard` shows a headless `claude -p` session as finished when it ends. Without Stop hooks, those sessions never write the records the page used, so it said "Prompt 1 running" forever.
 - Copilot output, `.github/agents/squad.agent.md` and the projections for other hosts are unchanged, apart from the portable `squad_state` launch command below, which every host gets.
 
 #### Fixed
@@ -76,6 +78,7 @@ Claude Code is the first host after GitHub Copilot where Squad uses the host's o
   - Claude hooks reach the launcher through `$CLAUDE_PROJECT_DIR`. Standalone bundle installs write `squad state-mcp`. A CLI run through `npx` keeps the exact-version `npx` command.
   - `squad doctor` flags machine-specific launch commands and a missing launcher. Run `squad upgrade` once to fix an existing repository.
 - `squad init --client claude` tells you to run `claude --agent squad --mcp-config .mcp.json`, not Copilot. With several hosts it gives one line per host (#2453).
+- `.squad/squad.mjs` finds a `squad` on PATH. It used to skip every PATH entry, so a repository with only a global Squad CLI failed with "no Squad CLI found". Arguments reach the CLI unchanged on Windows (through npm's `.cmd` shims, never cmd.exe) and Linux, and a new CI job runs the launcher tests on both.
 
 ## [2.0.0-preview.4] - 2026-11-09
 
