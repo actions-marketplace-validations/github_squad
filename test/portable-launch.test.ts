@@ -14,6 +14,7 @@ import {
   mergeClaudeHooks,
   stripClaudeHooks,
   squadRepoLauncher,
+  squadRepoLauncherArgs,
   SQUAD_REPO_LAUNCHER_MARKER,
 } from '@bradygaster/squad-sdk/client';
 import {
@@ -33,7 +34,7 @@ const localEntry: SquadStateMcpSpec = {
   source: 'local-entry',
   fallback,
 };
-const repoLauncher = { command: 'node', args: ['.squad/squad.mjs', 'state-mcp'] };
+const repoLauncher = { command: 'node', args: squadRepoLauncherArgs('.squad', 'state-mcp') };
 
 let root: string;
 beforeEach(() => {
@@ -140,6 +141,9 @@ describe('Claude hooks through the repository launcher (#2462)', () => {
       command: 'node "$CLAUDE_PROJECT_DIR/.squad/squad.mjs" hook claude Stop',
       args: [],
     });
+    // The plain script form, written before the bootstrap, maps to the same hook.
+    expect(claudeHookLaunch({ command: 'node', args: ['.squad/squad.mjs', 'state-mcp'] }, 'Stop'))
+      .toEqual(claudeHookLaunch(repoLauncher, 'Stop'));
     // Anything else keeps the argv form.
     expect(claudeHookLaunch({ command: 'node', args: ['/abs/.squad/squad.mjs', 'state-mcp'] }, 'Stop')!.args)
       .toEqual(['/abs/.squad/squad.mjs', 'hook', 'claude', 'Stop']);
@@ -191,6 +195,61 @@ describe('the repository launcher script (#2462)', () => {
 
   beforeEach(() => {
     write('.squad/squad.mjs', squadRepoLauncher('2.0.0', '.squad'));
+  });
+
+  it('starts from a subfolder of the repository, as Claude Code does in a monorepo package', () => {
+    // Claude Code finds the root .mcp.json from packages/api and starts the server there.
+    fakeCli(root, '2.0.1');
+    fs.mkdirSync(path.join(root, '.git'));
+    const api = path.join(root, 'packages', 'api');
+    fs.mkdirSync(api, { recursive: true });
+    const spec = committedSquadStateMcpSpec(localEntry, '.squad');
+    for (const cwd of [root, api]) {
+      const out = spawnSync(spec.command, [...spec.args.slice(0, -1), 'state-mcp', 'a b', '"q"'], {
+        cwd, encoding: 'utf8', env: { PATH: path.dirname(process.execPath) },
+      });
+      expect(out.stderr, cwd).toBe('');
+      expect(out.stdout.trim()).toBe('fake 2.0.1 ["state-mcp","a b","\\"q\\""]');
+    }
+    // It stops at the repository root: a nested repository never runs the launcher above it.
+    const nested = path.join(root, 'packages', 'inner');
+    fs.mkdirSync(path.join(nested, '.git'), { recursive: true });
+    const out = spawnSync(spec.command, spec.args, { cwd: nested, encoding: 'utf8', env: { PATH: path.dirname(process.execPath) } });
+    expect(out.status).toBe(1);
+    expect(out.stdout).toBe('');
+    expect(out.stderr).toContain('was not found');
+  });
+
+  it('runs only the launcher at the repository root, never one in a subfolder or above the root (Copilot review)', () => {
+    fakeCli(root, '2.0.1');
+    fs.mkdirSync(path.join(root, '.git'));
+    const env = { PATH: path.dirname(process.execPath) };
+    const spec = committedSquadStateMcpSpec(localEntry, '.squad');
+    // A package's own .squad/squad.mjs does not shadow the root launcher the root .mcp.json names.
+    const api = path.join(root, 'packages', 'api');
+    fs.mkdirSync(path.join(api, '.squad'), { recursive: true });
+    fs.writeFileSync(path.join(api, '.squad', 'squad.mjs'), "console.log('PLANTED')\n");
+    const fromApi = spawnSync(spec.command, spec.args, { cwd: api, encoding: 'utf8', env });
+    expect(fromApi.stdout).not.toContain('PLANTED');
+    expect(fromApi.stdout.trim()).toBe('fake 2.0.1 ["state-mcp"]');
+    // With no .git anywhere, nothing is searched: a launcher above the working directory is never run.
+    const loose = fs.mkdtempSync(path.join(os.tmpdir(), 'squad-no-git-'));
+    try {
+      fs.mkdirSync(path.join(loose, '.squad'));
+      fs.writeFileSync(path.join(loose, '.squad', 'squad.mjs'), "console.log('PLANTED')\n");
+      const sub = path.join(loose, 'sub');
+      fs.mkdirSync(sub);
+      const out = spawnSync(spec.command, spec.args, { cwd: sub, encoding: 'utf8', env });
+      expect(out.status).toBe(1);
+      expect(out.stdout).not.toContain('PLANTED');
+      expect(out.stderr).toContain('was not found');
+    } finally {
+      fs.rmSync(loose, { recursive: true, force: true });
+    }
+    // A script path that leaves the root is refused.
+    const escape = spawnSync(spec.command, [spec.args[0]!, spec.args[1]!, '../outside/squad.mjs', 'state-mcp'], { cwd: root, encoding: 'utf8', env });
+    expect(escape.status).toBe(1);
+    expect(escape.stderr).toContain('was not found');
   });
 
   it('runs the repository\'s own install from any working directory', () => {
@@ -262,7 +321,7 @@ describe('squad doctor: portable launch commands (#2462)', () => {
   });
 
   it('checks Claude hooks too, and that the launcher exists', () => {
-    write('.mcp.json', mcp('node', ['.squad/squad.mjs', 'state-mcp']));
+    write('.mcp.json', mcp('node', squadRepoLauncherArgs('.squad', 'state-mcp')));
     write('.claude/settings.json', JSON.stringify({
       hooks: { Stop: [{ hooks: [{ type: 'command', command: 'node "$CLAUDE_PROJECT_DIR/.squad/squad.mjs" hook claude Stop' }] }] },
     }));
