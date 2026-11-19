@@ -331,6 +331,42 @@ describe('compiled Squad command authorization boundary (#2185)', () => {
     expect(guarded.mutations).toEqual([]);
   });
 
+  it('rejects alternate comment endings before a writer can reconstruct protected text', async () => {
+    const body = [
+      '## Planning Lifecycle',
+      '**State:** Planned',
+      '**Last command:** `/squad triage`',
+      '**Next action:** `/squad plan`',
+      'Activation <!-- split --!>ignored -->bindings:',
+    ].join('\n');
+    const direct = await writeLifecycle(body);
+    expect(direct.failures).toEqual([]);
+    expect(direct.writes).toHaveLength(1);
+    expect(direct.writes[0].body).toContain('Activation bindings:');
+
+    const guarded = await runGuard({
+      payload: payloadFor('triage'),
+      permission: 'admin',
+      items: [{ type: 'upsert_lifecycle_state', body }],
+    });
+    expect(guarded.failures.join('\n')).toMatch(/Unsupported HTML comment terminator/);
+    expect(guarded.mutations).toEqual([]);
+
+    const source = readFileSync(join(trusted, 'squad-command-contract.mjs'), 'utf8');
+    const mutated = source.replace(
+      "if (body.startsWith('--!>', close)) {\n        throw new Error('Unsupported HTML comment terminator in agent output; refusing ambiguous authority.');\n      }",
+      "if (body.startsWith('--!>', close)) { close += 4; break; }",
+    );
+    expect(mutated).not.toBe(source);
+    const mutantPath = join(trusted, 'squad-command-contract-terminator-mutant.mjs');
+    writeFileSync(mutantPath, mutated);
+    const mutant = await import(pathToFileURL(mutantPath).href);
+    await expect(mutant.enforceSquadCommandContract({
+      payload: payloadFor('triage'), eventName: 'issue_comment', actor: 'maintainer',
+      resolvePermission: async () => 'admin', agentOutputPath: outputPath, createComment: vi.fn(),
+    })).resolves.toMatchObject({ status: 'accepted' });
+  });
+
   it('rejects comment-split lifecycle authority when the live contract is mutated', async () => {
     const body = '**State:** Act<!--split-->ivated';
     const guarded = await runGuard({

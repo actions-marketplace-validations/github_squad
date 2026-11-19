@@ -451,7 +451,9 @@ function withoutCommentsForInspection(body) {
     let close = open + 4;
     while ((close = body.indexOf('--', close)) !== -1) {
       if (body.startsWith('-->', close)) { close += 3; break; }
-      if (body.startsWith('--!>', close)) { close += 4; break; }
+      if (body.startsWith('--!>', close)) {
+        throw new Error('Unsupported HTML comment terminator in agent output; refusing ambiguous authority.');
+      }
       close++;
     }
     if (close === -1) throw new Error('Unclosed HTML comment in agent output; refusing ambiguous authority.');

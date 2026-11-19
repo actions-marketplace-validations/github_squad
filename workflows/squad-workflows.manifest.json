@@ -177,7 +177,7 @@
       "package_destination": ".github/workflows/shared/squad-command-contract.mjs",
       "destination": ".github/workflows/shared/squad-command-contract.mjs",
       "ownership": "manifest",
-      "sha256": "6b88503b4f510314b74a361491705cae715f279960d1445f405baacc6298ec17"
+      "sha256": "295d4f828094b2b71bbb947007d125471ef80f22b503bfb7775e1e6a366485b5"
     },
     {
       "path": "shared/squad-evidence-provider.mjs",
