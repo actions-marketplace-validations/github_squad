@@ -62,8 +62,8 @@ function write(file: string, body: string, mode?: number): void {
 }
 
 /** A shim that must never run: under cmd.exe it prints SHELL-USED. */
-function cmdShim(name: string): void {
-  write(path.join(bin, `${name}.cmd`), '@echo SHELL-USED %*\r\n');
+function cmdShim(name: string, dir = bin): void {
+  write(path.join(dir, `${name}.cmd`), '@echo SHELL-USED %*\r\n');
 }
 
 function run(args: string[], env: Record<string, string> = {}) {
@@ -102,6 +102,31 @@ describe('the launcher passes argv through unchanged', () => {
     expect(parsed(run(HOSTILE))).toEqual(HOSTILE);
   });
 
+  it.runIf(win)('resolves a workspace .bin shim to its sibling package without a shell', () => {
+    const modules = path.join(root, 'workspace', 'node_modules');
+    const workspaceBin = path.join(modules, '.bin');
+    cmdShim('squad', workspaceBin);
+    const pkg = path.join(modules, ...PKG);
+    write(path.join(pkg, 'package.json'), JSON.stringify({ name: PKG.join('/'), version: '2.0.0' }));
+    write(path.join(pkg, 'dist', 'cli-entry.js'), ECHO);
+    expect(parsed(run(HOSTILE, { PATH: [workspaceBin, path.dirname(process.execPath)].join(path.delimiter) }))).toEqual(HOSTILE);
+  });
+
+  it.runIf(win)('skips an outdated workspace .bin shim in favor of a recorded CLI', () => {
+    const modules = path.join(root, 'workspace', 'node_modules');
+    const workspaceBin = path.join(modules, '.bin');
+    cmdShim('squad', workspaceBin);
+    const pkg = path.join(modules, ...PKG);
+    write(path.join(pkg, 'package.json'), JSON.stringify({ name: PKG.join('/'), version: '1.0.0' }));
+    write(path.join(pkg, 'dist', 'cli-entry.js'), "throw new Error('outdated CLI selected');\n");
+    const recorded = path.join(root, 'recorded', 'node_modules', ...PKG);
+    const entry = path.join(recorded, 'dist', 'cli-entry.js');
+    write(path.join(recorded, 'package.json'), JSON.stringify({ name: PKG.join('/'), version: '2.0.0' }));
+    write(entry, ECHO);
+    write(path.join(root, 'squad-home', 'cli.json'), JSON.stringify({ entry }));
+    expect(parsed(run(HOSTILE, { PATH: [workspaceBin, path.dirname(process.execPath)].join(path.delimiter) }))).toEqual(HOSTILE);
+  });
+
   it('to npx when SQUAD_ALLOW_NPX=1', () => {
     if (win) {
       cmdShim('npx');
@@ -110,6 +135,18 @@ describe('the launcher passes argv through unchanged', () => {
       write(path.join(bin, 'npx'), `#!/usr/bin/env node\n${ECHO}`, 0o755);
     }
     expect(parsed(run(HOSTILE, { SQUAD_ALLOW_NPX: '1' }))).toEqual(['-y', `${PKG.join('/')}@2.0.0`, ...HOSTILE]);
+  });
+
+  it.runIf(win)('resolves a workspace npx .bin shim without a shell', () => {
+    const modules = path.join(root, 'workspace', 'node_modules');
+    const workspaceBin = path.join(modules, '.bin');
+    cmdShim('npx', workspaceBin);
+    write(path.join(modules, 'npm', 'bin', 'npx-cli.js'), ECHO);
+    const out = run(HOSTILE, {
+      PATH: [workspaceBin, path.dirname(process.execPath)].join(path.delimiter),
+      SQUAD_ALLOW_NPX: '1',
+    });
+    expect(parsed(out)).toEqual(['-y', `${PKG.join('/')}@2.0.0`, ...HOSTILE]);
   });
 
   it('to SQUAD_CLI given as a script', () => {
@@ -127,6 +164,7 @@ describe('the launcher passes argv through unchanged', () => {
 
   it.runIf(win)('fails closed when a .cmd shim has no JavaScript entry beside it', () => {
     cmdShim('squad');
+    write(path.join(bin, 'node_modules', ...PKG, 'package.json'), JSON.stringify({ name: PKG.join('/'), version: '2.0.0' }));
     const out = run(['state-mcp']);
     expect(out.status).toBe(1);
     expect(out.stdout).not.toContain('SHELL-USED');
