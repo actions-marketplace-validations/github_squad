@@ -112,6 +112,14 @@ describe('the launcher passes argv through unchanged', () => {
     expect(parsed(run(HOSTILE, { PATH: [workspaceBin, path.dirname(process.execPath)].join(path.delimiter) }))).toEqual(HOSTILE);
   });
 
+  it.runIf(win)('resolves an explicitly configured workspace .bin shim', () => {
+    const modules = path.join(root, 'workspace', 'node_modules');
+    const workspaceBin = path.join(modules, '.bin');
+    cmdShim('squad', workspaceBin);
+    write(path.join(modules, ...PKG, 'dist', 'cli-entry.js'), ECHO);
+    expect(parsed(run(HOSTILE, { SQUAD_CLI: path.join(workspaceBin, 'squad.cmd') }))).toEqual(HOSTILE);
+  });
+
   it.runIf(win)('skips an outdated workspace .bin shim in favor of a recorded CLI', () => {
     const modules = path.join(root, 'workspace', 'node_modules');
     const workspaceBin = path.join(modules, '.bin');
